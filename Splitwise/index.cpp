@@ -105,6 +105,20 @@ public:
         }
     }
 
+    void settleUp(const User& fromUser, const User& toUser, int amount) {
+        int debtor = fromUser.getUserId();
+        int creditor = toUser.getUserId();
+            if (balances[creditor][debtor] < amount) {
+                cout << "Settlement amount exceeds pending balance" << endl;
+                return;
+            }
+
+            balances[creditor][debtor] -= amount;
+            balances[debtor][creditor] += amount;
+
+            transactions.emplace_back(debtor, creditor, amount);
+        }
+
     void showBalances() const {
         for (const auto& p1 : balances) {
             int creditor = p1.first;
@@ -117,6 +131,16 @@ public:
                          << " to " << creditor << endl;
                 }
             }
+        }
+    }
+    void showTransactions() const {
+        if (transactions.empty()) {
+            cout << "No transactions found" << endl;
+            return;
+        }
+
+        for (const auto& t : transactions) {
+            t.printTransaction();
         }
     }
 };
@@ -134,4 +158,7 @@ int main(){
     splitwise.addUser(user3);
     splitwise.addExpense(expense);
     splitwise.showBalances();
+    splitwise.settleUp(user2,user1,500);
+    splitwise.showBalances();
+    splitwise.showTransactions();
 }
