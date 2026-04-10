@@ -49,7 +49,7 @@ public:
         : maxRequests(maxRequests), windowSize(windowSize) {}
 
     bool allowRequest(const string& userId, int currentTime) override {
-        lock_guard<mutex> lock(mtx);  // 🔥 critical section protected
+        lock_guard<mutex> lock(mtx);  //critical section protected
 
         int windowStart = windowSize * (currentTime / windowSize);
 
