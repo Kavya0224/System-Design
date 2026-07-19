@@ -1,378 +1,61 @@
-# Car Rental System - Low Level Design (LLD)
+# 🚗 Car Rental System — LLD Interview Guide
 
-## Overview
-
-This project is a simplified implementation of a Car Rental System using C++ and Object-Oriented Design principles.
-
-The system allows users to:
-
-* Search available cars
-* Book cars
-* Make payments
-* Start rides
-* Complete rides
-* Cancel bookings
-
-The main goal of this project is to understand how real-world rental platforms internally manage:
-
-* inventory
-* bookings
-* payments
-* ride lifecycle
-* availability management
+## 📋 Problem Statement
+Design a car rental system supporting vehicle inventory across locations, reservation/booking, pricing, and return with damage/late-fee checks.
 
 ---
 
-# Functional Requirements
+## 🎤 Interview Flow
 
-* User should be able to search available cars
-* User should be able to book a car
-* User should be able to make payment
-* User should be able to start ride
-* User should be able to complete ride
-* User should be able to cancel booking
-* System should prevent double booking
+**Q1. Interviewer:** How do you structure the domain?
+**A:** `RentalLocation` owns a fleet of `Vehicle`s (with `VehicleType`: Sedan, SUV, etc.). A `Reservation` books a specific vehicle category (not necessarily one exact car) for a date range at a pickup/drop-off location, and the actual `Vehicle` instance gets assigned at pickup time.
 
----
+**Q2. Interviewer:** Why book by category rather than a specific car upfront?
+**A:** Because between reservation and pickup, exact inventory can shift (a car goes into maintenance, etc.) — booking by category with assignment at pickup gives flexibility, similar to how real rental companies operate ("a car in this class or similar").
 
-# Non Functional Requirements
+**Q3. Interviewer:** How do you check vehicle availability for a date range?
+**A:** Each `Vehicle` maintains a sorted list/interval structure of booked date ranges. Checking availability is an interval-overlap query — for a fleet, I'd check category-level available count for the requested range rather than scanning every vehicle, using an interval tree or simply per-day counters for reasonable date ranges.
 
-## Availability
+**Q4. Interviewer:** How do you compute rental price?
+**A:** A `PricingStrategy` based on vehicle category's daily rate × number of days, plus optional add-ons (insurance, GPS, child seat) each contributing to the total via a composable list — again Strategy/Decorator-style so pricing rules evolve independently of the reservation flow.
 
-The system should always allow users to search available cars reliably.
+**Q5. Interviewer:** What happens at pickup?
+**A:** `Reservation.confirmPickup()` assigns a specific available `Vehicle` from the category, transitions reservation to `ACTIVE`, and records odometer/fuel level for later comparison at return.
 
----
+**Q6. Interviewer:** How do you handle return — late fees and damage?
+**A:** `Reservation.completeReturn()` compares actual return time against agreed drop-off time (late fee via a `LateFeeStrategy` — e.g., per-hour charge beyond a grace period) and compares odometer/fuel/condition notes against pickup baseline to flag damage, which routes to a `DamageAssessmentService` before finalizing the bill.
 
-## Consistency
-
-The same car should not be booked by multiple users simultaneously.
-
----
-
-## Concurrency
-
-Multiple users may try booking the same car at the same time.
-The system should handle concurrent requests safely.
+**Q7. Interviewer:** How would you handle cross-location drop-off (picked up in City A, dropped in City B)?
+**A:** Add a `oneWayFee` when `pickupLocation != dropoffLocation`, and on return, the vehicle's location is simply updated to the drop-off location's fleet rather than needing to physically "move" data — the vehicle is now available for booking from City B going forward.
 
 ---
 
-# Core Entities
-
-## User
-
-Represents a customer using the rental platform.
-
-### Fields
-
-* userId
-* userName
-* phoneNumber
-* address
-
----
-
-## Car
-
-Represents a rental vehicle.
-
-### Fields
-
-* carId
-* carType
-* carName
-* availability
-* pricePerDay
-
-### Responsibilities
-
-* Maintain availability status
-* Provide pricing details
-* Handle booking/release operations
-
----
-
-## Payment
-
-Handles payment processing.
-
-### Responsibilities
-
-* Process payment
-* Maintain payment status
-
-### Payment States
-
-```text
-PENDING
-SUCCESS
-FAILED
-```
-
----
-
-## Booking
-
-Represents a car reservation.
-
-### Responsibilities
-
-* Track ride lifecycle
-* Start ride
-* Complete ride
-* Cancel booking
-
-### Booking States
-
-```text
-BOOKED
-ONGOING
-COMPLETED
-CANCELLED
-```
-
----
-
-## CarRentalSystem
-
-Acts as the central management system.
-
-### Responsibilities
-
-* Store all cars
-* Handle bookings
-* Manage inventory
-* Coordinate payment and booking flow
-
----
-
-# System Flow
-
-## Car Booking Flow
-
-```text
-Search Car
-    ↓
-Select Car
-    ↓
-Check Availability
-    ↓
-Reserve Car
-    ↓
-Process Payment
-    ↓
-Payment Success?
-   /        \
- YES         NO
-  ↓           ↓
-Booking     Release Car
-Confirmed
-```
-
----
-
-# Ride Lifecycle
-
-```text
-BOOKED
-   ↓
-ONGOING
-   ↓
-COMPLETED
-```
-
-or
-
-```text
-BOOKED
-   ↓
-CANCELLED
-```
-
----
-
-# Design Decisions
-
-## Why Separate Payment Entity?
-
-Payment is isolated because:
-
-* payment logic may grow independently
-* supports multiple payment methods
-* improves modularity
-
----
-
-## Why Availability Inside Car?
-
-Availability is a property of the car itself.
-
-```cpp
-bool available;
-```
-
-This improves encapsulation.
-
----
-
-## Why CarRentalSystem Entity?
-
-Without a central system:
-
-* cars become disconnected
-* bookings become difficult to manage
-* inventory tracking becomes scattered
-
-`CarRentalSystem` acts as the orchestrator.
-
----
-
-# Data Structures Used
-
-## unordered_map<int, Car>
-
-Stores:
-
-```text
-carId -> Car
-```
-
-for fast lookup.
-
----
-
-## vector<Booking>
-
-Stores all booking history.
-
----
-
-# Time Complexity
-
-| Operation      | Complexity |
-| -------------- | ---------- |
-| Add Car        | O(1)       |
-| Search Car     | O(n)       |
-| Book Car       | O(1)       |
-| Cancel Booking | O(1)       |
-| Car Lookup     | O(1)       |
-
----
-
-# Edge Cases Handled
-
-## Double Booking Prevention
-
-Before booking:
-
-```cpp
-if(!car.isAvailable())
-```
-
-prevents multiple users from booking the same car.
-
----
-
-## Payment Failure
-
-If payment fails:
-
-```cpp
-car.releaseCar();
-```
-
-releases reserved car.
-
-This prevents permanent locking of inventory.
-
----
-
-# Limitations
-
-Current implementation does not include:
-
-* Database persistence
-* Authentication
-* Real payment gateway
-* Booking time windows
-* Thread safety
-* Dynamic pricing
-* GPS tracking
-
----
-
-# Future Enhancements
-
-## Dynamic Pricing
-
-Pricing can depend on:
-
-* demand
-* duration
-* location
-* car type
-
-Can be implemented using:
-
-* Strategy Pattern
-
----
-
-## Time Slot Booking
-
-Support:
-
-* hourly rentals
-* overlapping booking checks
-* reservation windows
-
----
-
-## Thread Safety
-
-Use mutex/locks to prevent race conditions during simultaneous booking requests.
-
----
-
-## Payment Gateway Integration
-
-Integrate:
-
-* Stripe
-* Razorpay
-* PayPal
-
----
-
-## Database Integration
-
-Replace in-memory storage with:
-
-* MySQL
-* PostgreSQL
-* MongoDB
-
----
-
-# Design Patterns That Can Be Added
-
-* Strategy Pattern (Pricing)
-* Factory Pattern (Car Creation)
-* Singleton Pattern (Rental System)
-* Observer Pattern (Notifications)
-
----
-
-# Learning Outcomes
-
-This project helped in understanding:
-
-* Object-Oriented Design
-* Booking Lifecycle Management
-* Payment Handling
-* Inventory Management
-* Entity Relationships
-* Availability Management
-* Concurrency Considerations
-* Low Level System Design
-
----
+## ✅ Functional Requirements
+- Search/reserve vehicles by category, date range, location
+- Pickup with specific vehicle assignment
+- Return with late fee and damage assessment
+- Add-ons (insurance, GPS) pricing
+
+## ⚙️ Non-Functional Requirements
+- Accurate availability under overlapping date-range bookings
+- Extensible pricing/fee strategies
+- Cross-location (one-way rental) support
+
+## 🏗️ Core Classes
+- `RentalLocation`, `Vehicle`, `VehicleType`
+- `Reservation` (context) with `ReservationState`
+- `PricingStrategy`, `LateFeeStrategy`, `AddOn`
+- `DamageAssessmentService`
+
+## 🎨 Design Patterns Used
+- **Strategy** — pricing, late fee
+- **State** — reservation lifecycle (Booked → Active → Completed)
+- **Decorator-style composition** — add-ons stacking onto base price
+
+## ⚠️ Edge Cases Handled
+- Category available but exact car assignment conflict at pickup
+- Late return beyond grace period
+- One-way (cross-location) rentals
+
+## 🚀 Extensibility
+- Loyalty/membership tiers, dynamic demand-based pricing, fleet maintenance scheduling.
